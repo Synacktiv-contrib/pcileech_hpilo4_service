@@ -24,7 +24,7 @@ class ModBackdoor():
 		try:
 			r = requests.get(self.backdoor_url, verify=False)
 		except:
-			if self.versbose:
+			if self.verbose:
 				print "[-] Fail contacting iLO"
 			return False
 		if r.status_code != 400:
