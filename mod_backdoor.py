@@ -5,11 +5,17 @@ import time
 
 class ModBackdoor():
 
-	def __init__(self, ip_addr, verbose):
+	def __init__(self, args):
 		requests.packages.urllib3.disable_warnings()
-		self.ilo_url = "https://" + ip_addr
+		self.ilo_url = "https://" + args.remote_addr
 		self.backdoor_url = "%s/backd00r.htm" % self.ilo_url
-		self.verbose = verbose
+		self.verbose = args.verbose
+
+	def start(self):
+		return True
+
+	def stop(self):
+		return True
 
 	def status(self):
 		return 1 if self.detect_backdoor() else 0
@@ -18,13 +24,16 @@ class ModBackdoor():
 		try:
 			r = requests.get(self.backdoor_url, verify=False)
 		except:
-			print "[-] Fail contacting iLO"
+			if self.versbose:
+				print "[-] Fail contacting iLO"
 			return False
 		if r.status_code != 400:
-			print "[-] iLO Backdoor not detected"
+			if self.verbose:
+				print "[-] iLO Backdoor not detected"
 			return False
 		else:
-			print "[+] iLO Backdoor found"
+			if self.verbose:
+				print "[+] iLO Backdoor found"
 			return True
 
 	def dump_memory(self, addr, count):

